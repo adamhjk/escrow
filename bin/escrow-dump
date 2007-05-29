@@ -1,0 +1,105 @@
+#!/usr/bin/perl
+#
+# escrow-dump
+# Created by: Adam Jacob, Marchex, <adam@marchex.com>
+# Created on: 09/23/2006 02:34:55 PM PDT
+#
+# $Id: escrow-dump,v 1.1 2006/09/24 09:25:21 adam Exp $
+
+use FindBin;
+use lib ( "$FindBin::Bin/../lib" );
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Log::Log4perl;
+use Pod::Usage;
+use Escrow::Config;
+use Config::General;
+use Escrow::Store::DBIC;
+
+my $configfile = "/etc/escrow/escrow.conf";
+my $thing;
+my $debuglevel = "ERROR";
+
+my $man = 0;
+my $help = 0;
+GetOptions(
+    'c|config=s' => \$configfile,
+    't|thing=s' => \$thing,
+    'd|debug=s' => \$debuglevel,
+    'help|?' => \$help,
+    'man' => \$man,
+);
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+
+$debuglevel = uc($debuglevel);
+
+my %logconf = ( 
+"log4perl.rootLogger" => "$debuglevel, Screen",
+"log4perl.appender.Screen" => 'Log::Log4perl::Appender::Screen',
+"log4perl.appender.Screen.layout" => 'Log::Log4perl::Layout::PatternLayout',
+"log4perl.appender.Screen.layout.ConversionPattern" => '[%C (%L)] [%p] %m%n',
+);
+
+Log::Log4perl->init(\%logconf);
+
+my $ecfg = Escrow::Config->new('file' => $configfile);
+my $storeconfig = $ecfg->config->{'loader'}->{'store'};
+
+my $store = Escrow::Store::DBIC->new($storeconfig);
+
+my $cg = Config::General->new;
+if (defined($thing)) {
+    my $td = $store->get_thing(thing => $thing);
+    print $cg->save_string($td);
+} else {
+    my $rawdata = $store->get;
+    print $cg->save_string($rawdata);
+}
+
+exit 0;
+
+__END__
+
+=head1 NAME
+
+escrow-dump - Dump out the raw Escrow database
+
+=head1 SYNOPSIS
+
+escrow [options]
+
+  Options:
+   -t, -thing    A specific thing to dump.
+   -c, -config   An escrow.conf file.
+   -d, -debug    A Log4Perl debug level. 
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-t or -thing>
+
+Instead of dumping the entire database, just dump this one thing.
+
+=item B<-c or -config>
+
+A file to use to configure how Escrow will work.  Defaults to BASE/conf/escrow.conf.
+
+=item B<-d or -debug>
+
+Sets a Log4perl debug level.  If you set this to DEBUG, escrow-dump will get
+super chatty on STDOUT.  Defaults to ERROR.
+
+=back
+
+=head1 DESCRIPTION
+
+B<escrow-dump> dumps out the contents of the Escrow database in Config::General format. (The same format that's used by the "escrow" command and Escrow::Loader)
+
+By default, it dumps the entire database.
+
+=cut

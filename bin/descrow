@@ -1,0 +1,153 @@
+#!/usr/bin/perl
+#
+# descrow
+# Created by: Adam Jacob, Marchex, <adam@marchex.com>
+# Created on: 09/23/2006 02:34:55 PM PDT
+#
+# $Id: descrow,v 1.3 2006/10/11 00:23:15 adam Exp $
+
+use FindBin;
+use lib ( "$FindBin::Bin/../lib" );
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Log::Log4perl;
+use Pod::Usage;
+use Escrow::Descrow;
+use Exception::Class::TryCatch;
+
+my $configfile = "/etc/escrow/escrow-client.conf";
+my $tmpdir = "/tmp";
+my $debuglevel = "ERROR";
+my $server = "http://escrow:19999";
+my $datafile;
+my $thing;
+my $destfile;
+my $raw = 0;
+
+my $man = 0;
+my $help = 0;
+GetOptions(
+    's|server=s' => \$server,
+    'c|config=s' => \$configfile,
+    'f|file=s' => \$datafile,
+    'd|destfile=s' => \$destfile, 
+    'r|raw' => \$raw,
+    't|thing=s' => \$thing,
+    'L|debug=s' => \$debuglevel,
+    'M|tmpdir=s' => \$tmpdir,
+    'help|?' => \$help,
+    'man' => \$man,
+);
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+
+pod2usage(-exitstatus => 1, -msg => "You must supply -t") unless $thing;
+
+if (! $raw) {
+    pod2usage(-exitstatus => 1, -msg => "You must supply -r or -f and -d") unless defined $datafile && defined $destfile && defined $thing;
+}
+
+$debuglevel = uc($debuglevel);
+
+my %logconf = ( 
+"log4perl.rootLogger" => "$debuglevel, Screen",
+"log4perl.appender.Screen" => 'Log::Log4perl::Appender::Screen',
+"log4perl.appender.Screen.layout" => 'Log::Log4perl::Layout::PatternLayout',
+"log4perl.appender.Screen.layout.ConversionPattern" => '[%C (%L)] [%p] %m%n',
+);
+
+Log::Log4perl->init(\%logconf);
+
+eval {
+    my $descrow = Escrow::Descrow->new(
+        server => $server,
+        tmpdir => $tmpdir,
+        configfile => $configfile,
+    );
+    
+    if (! $raw) { 
+        $descrow->descrow(
+            thing => $thing,
+            file => $datafile,
+            destfile => $destfile,
+        );
+    } else {
+        print $descrow->raw(
+            thing => $thing,
+        );   
+    }
+};
+if ( catch my $err ) {
+    print $err->error . "\n";
+    exit 1;
+}
+
+exit 0;
+
+__END__
+
+=head1 NAME
+
+descrow - Populate a Template file with Data from a Thing in Escrow
+
+=head1 SYNOPSIS
+
+escrow [options]
+
+  Options:
+   -s, -server     The Escrow Server to Talk to (must be a URL.) 
+   -r, -raw        (Optional) Prints raw YAML to the screen this or -f and -d
+   -f, -file       (Required) A template file to parse.
+   -d, -destfile   (Required) The file to write the final output to. 
+   -t, -thing      (Required) The thing to get out of Escrow.
+   -m, -tmpdir     A temporary directory.
+   -c, -config     An escrow-client.conf file.
+   -L, -debug      A Log4Perl debug level. 
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-s or -server>
+
+The Escrow Server to hit.  Must be an HTTP URL.  Defaults to http://escrow:19999.
+
+=item B<-r or -raw>
+
+If specified, will print the data returned as YAML to STDOUT.
+
+=item B<-f or -file> (required)
+
+A Template file to process.
+
+=item B<-d or -destfile> (required)
+
+Where the results of our template processing should go.
+
+=item B<-t or -thing> (required)
+
+The thing you want to get out of Escrow.
+
+=item B<-m or -tmpdir> 
+
+Where to write our temporary files to.  Defaults to BASE/tmp.
+
+=item B<-c or -config>
+
+A file to use to configure the Escrow::Service::Client will work.  Defaults to BASE/conf/escrow-client.conf.
+
+=item B<-L or -debug>
+
+Sets a Log4perl debug level.  If you set this to DEBUG, descrow will get
+super chatty on STDOUT.  Defaults to ERROR.
+
+=back
+
+=head1 DESCRIPTION
+
+B<descrow> gathers data for a thing through the Escrow Service, and uses that data to populate a Template. 
+
+=cut

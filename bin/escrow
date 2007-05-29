@@ -1,0 +1,106 @@
+#!/usr/bin/perl
+#
+# escrow
+# Created by: Adam Jacob, Marchex, <adam@marchex.com>
+# Created on: 09/23/2006 02:34:55 PM PDT
+#
+# $Id: escrow,v 1.2 2006/09/26 00:25:09 adam Exp $
+
+use FindBin;
+use lib ( "$FindBin::Bin/../lib" );
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Log::Log4perl;
+use Pod::Usage;
+use Escrow::Config;
+use Escrow::Loader;
+
+my $configfile = "/etc/escrow/escrow.conf";
+my $datafile = "/etc/escrow/data/escrow";
+my $debuglevel = "ERROR";
+
+my $man = 0;
+my $help = 0;
+GetOptions(
+    'c|config=s' => \$configfile,
+    'f|file=s' => \$datafile,
+    'd|debug=s' => \$debuglevel,
+    'help|?' => \$help,
+    'man' => \$man,
+);
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+
+$debuglevel = uc($debuglevel);
+
+my %logconf = ( 
+"log4perl.rootLogger" => "$debuglevel, Screen",
+"log4perl.appender.Screen" => 'Log::Log4perl::Appender::Screen',
+"log4perl.appender.Screen.layout" => 'Log::Log4perl::Layout::PatternLayout',
+"log4perl.appender.Screen.layout.ConversionPattern" => '[%C (%L)] [%p] %m%n',
+);
+
+Log::Log4perl->init(\%logconf);
+
+my $ecfg = Escrow::Config->new('file' => $configfile);
+my $loaderconfig = $ecfg->config->{'loader'};
+$loaderconfig->{'load'}->{'config'}->{'file'} = $datafile;
+
+my $dbiline = $loaderconfig->{'store'}->{'config'}->{'connect_config'}->[0];
+my ($dbfile) = ($dbiline =~ /dbi:SQLite:dbname=(.+)/);
+my $deployed = 0;
+if (-f $dbfile) {
+    $deployed = 1;
+}
+
+my $loader = Escrow::Loader->new($loaderconfig);
+unless ($deployed) {
+    $loader->storer->schema->deploy;
+}
+$loader->parse_data;
+$loader->save;
+
+exit 0;
+
+__END__
+
+=head1 NAME
+
+escrow - Write a data file to Escrow
+
+=head1 SYNOPSIS
+
+escrow [options]
+
+  Options:
+   -f, -file     A data file to parse.
+   -c, -config   An escrow.conf file.
+   -d, -debug    A Log4Perl debug level. 
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-f or -file>
+
+A file to use to load the Escrow store.  Defaults to BASE/data/escrow.
+
+=item B<-c or -config>
+
+A file to use to configure how Escrow will work.  Defaults to BASE/conf/escrow.conf.
+
+=item B<-d or -debug>
+
+Sets a Log4perl debug level.  If you set this to DEBUG, escrow will get
+super chatty on STDOUT.  Defaults to ERROR.
+
+=back
+
+=head1 DESCRIPTION
+
+B<escrow> reads a data file and populates the Escrow store with it's contents.
+
+=cut
